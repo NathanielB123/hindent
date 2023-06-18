@@ -417,6 +417,9 @@ nodeCommentsPat (SigPat x _ _) = nodeComments x
 
 instance CommentExtraction RecConPat where
   nodeComments (RecConPat x) = nodeComments x
+
+instance CommentExtraction (HsConPatTyArg GhcPs) where
+  nodeComments (HsConPatTyArg _ x) = nodeComments x
 #if !MIN_VERSION_ghc_lib_parser(9,4,1)
 instance CommentExtraction (HsBracket GhcPs) where
   nodeComments ExpBr {} = emptyNodeComments

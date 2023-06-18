@@ -1569,8 +1569,9 @@ prettyPat (SumPat _ x position numElem) = do
   string "#)"
 prettyPat ConPat {..} =
   case pat_args of
-    PrefixCon _ as -> do
+    PrefixCon ts as -> do
       pretty $ fmap PrefixOp pat_con
+      spacePrefixed $ fmap pretty ts
       spacePrefixed $ fmap pretty as
     RecCon rec -> (pretty pat_con >> space) |=> pretty (RecConPat rec)
     InfixCon a b -> do
@@ -1585,6 +1586,9 @@ prettyPat (LitPat _ x) = pretty x
 prettyPat (NPat _ x _ _) = pretty x
 prettyPat (NPlusKPat _ n k _ _ _) = pretty n >> string "+" >> pretty k
 prettyPat (SigPat _ l r) = spaced [pretty l, string "::", pretty r]
+
+instance Pretty (HsConPatTyArg GhcPs) where
+  pretty' (HsConPatTyArg _ x) = string "@" *> pretty x
 
 instance Pretty RecConPat where
   pretty' (RecConPat HsRecFields {..}) =
@@ -1934,7 +1938,7 @@ instance Pretty (HsForAllTelescope GhcPs) where
   pretty' HsForAllVis {..} = do
     string "forall "
     spaced $ fmap pretty hsf_vis_bndrs
-    dot
+    string " ->"
   pretty' HsForAllInvis {..} = do
     string "forall "
     spaced $ fmap pretty hsf_invis_bndrs
