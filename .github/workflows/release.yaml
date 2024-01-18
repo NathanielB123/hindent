@@ -5,6 +5,8 @@ on:
   release:
     types: [created]
 
+permissions: {}
+
 jobs:
   build:
     if: github.repository == 'mihaimaruseac/hindent' # Don't do this in forks
@@ -12,25 +14,25 @@ jobs:
     # Keep these in sync with a subset of Cabal-based CI matrix. This way, we
     # are not building a new cache here, just reusing an existing one.
     env:
-      os: "ubuntu-latest"
-      ghc: "9.4.4"
+      os: ubuntu-latest
+      ghc: 9.6.3
     outputs:
       hash_sdist: ${{ steps.hash_sdist.outputs.hash_sdist }}
       hash_execs: ${{ steps.hash_execs.outputs.hash_execs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           persist-credentials: false
 
       - name: Setup Haskell Compiler (cabal)
         id: setup-haskell
-        uses: haskell/actions/setup@d6a7b316f66cd8a730ed619cdc80c276df942196 # v2.4.3
+        uses: haskell-actions/setup@b1dc5f1786a382e9a2532d039e8c53cf56f21392 # v2.6.1
         with:
           ghc-version: ${{ env.ghc }}
 
       - name: Cache dist-newstyle
-        uses: actions/cache@88522ab9f39a2ea568f7027eddc7d8d8bc9d59c8 # v3.3.1
+        uses: actions/cache@e12d46a63a90f2fae62d114769bbf2a179198b5c # v3.3.3
         with:
           path: dist-newstyle
           key: dist-newstyle-${{ env.os }}-${{ env.ghc }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('internal/**','src/**','app/**','tests/**','benchmarks/**') }}
@@ -39,7 +41,7 @@ jobs:
             dist-newstyle-${{ env.os }}-${{ env.ghc }}-
 
       - name: Cache ~/.cabal/store
-        uses: actions/cache@88522ab9f39a2ea568f7027eddc7d8d8bc9d59c8 # v3.3.1
+        uses: actions/cache@e12d46a63a90f2fae62d114769bbf2a179198b5c # v3.3.3
         with:
           path: ${{ steps.setup-haskell.outputs.cabal-store }}
           key: cabal-store-${{ env.os }}-${{ env.ghc }}-${{ hashFiles('**/*.cabal') }}
@@ -65,7 +67,7 @@ jobs:
       # scripting if needed, but it works for our use cases as it is.
       # TODO(mihaimaruseac): Maybe fix to upload the path as needed
       - name: Upload sdist as an artifact for later jobs in workflow
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@1eb3cb2b3e0f29609092a73eb033bb759a334595 # v4.1.0
         with:
           path: hindent-*.tar.gz
           name: sdist.zip # When downloading it is a zip containing the sdist tarball
@@ -94,7 +96,7 @@ jobs:
       # [1]: https://frontside.com/blog/2022-12-12-dynamic-github-action-jobs/
       # TODO(mihaimaruseac): Maybe use automatic matrix generation here
       - name: Upload executables as an artifact for later jobs in workflow
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@1eb3cb2b3e0f29609092a73eb033bb759a334595 # v4.1.0
         with:
           path: .execs/
           name: executables.zip # When downloading it is a zip with all executables
@@ -107,7 +109,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.7.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
     with:
       base64-subjects: "${{ needs.build.outputs.hash_sdist }}"
       upload-assets: true
@@ -119,7 +121,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.7.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
     with:
       base64-subjects: "${{ needs.build.outputs.hash_execs }}"
       upload-assets: true
@@ -129,19 +131,21 @@ jobs:
     needs: [build, provenance-sdist, provenance-execs]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write # to upload to release notes
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4.1.1
         with:
           name: executables.zip
 
       - name: Download artifact
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935 # v4.1.1
         with:
           name: sdist.zip
 
       - name: Upload assets
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v0.1.15
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           files: ./*
 

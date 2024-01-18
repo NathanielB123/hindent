@@ -147,9 +147,6 @@ instance CommentExtraction (Sig GhcPs) where
   nodeComments (SCCFunSig x _ _ _) = nodeComments x
   nodeComments (CompleteMatchSig x _ _ _) = nodeComments x
 #endif
-instance CommentExtraction DeclSig where
-  nodeComments (DeclSig x) = nodeComments x
-
 instance CommentExtraction (HsDataDefn GhcPs) where
   nodeComments HsDataDefn {} = emptyNodeComments
 
@@ -626,7 +623,17 @@ instance CommentExtraction ModuleName where
 
 instance CommentExtraction ModuleNameWithPrefix where
   nodeComments ModuleNameWithPrefix {} = emptyNodeComments
-
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance CommentExtraction (IE GhcPs) where
+  nodeComments IEVar {} = emptyNodeComments
+  nodeComments (IEThingAbs (_, x) _) = nodeComments x
+  nodeComments (IEThingAll (_, x) _) = nodeComments x
+  nodeComments (IEThingWith (_, x) _ _ _) = nodeComments x
+  nodeComments (IEModuleContents (_, x) _) = nodeComments x
+  nodeComments IEGroup {} = emptyNodeComments
+  nodeComments IEDoc {} = emptyNodeComments
+  nodeComments IEDocNamed {} = emptyNodeComments
+#else
 instance CommentExtraction (IE GhcPs) where
   nodeComments IEVar {} = emptyNodeComments
   nodeComments (IEThingAbs x _) = nodeComments x
@@ -636,7 +643,7 @@ instance CommentExtraction (IE GhcPs) where
   nodeComments IEGroup {} = emptyNodeComments
   nodeComments IEDoc {} = emptyNodeComments
   nodeComments IEDocNamed {} = emptyNodeComments
-
+#endif
 instance CommentExtraction
            (FamEqn GhcPs (GenLocated SrcSpanAnnA (HsType GhcPs))) where
   nodeComments FamEqn {..} = nodeComments feqn_ext
@@ -647,8 +654,17 @@ instance CommentExtraction FamEqn' where
 -- | Pretty-print a data instance.
 instance CommentExtraction (FamEqn GhcPs (HsDataDefn GhcPs)) where
   nodeComments FamEqn {..} = nodeComments feqn_ext
-
 -- | HsArg (LHsType GhcPs) (LHsType GhcPs)
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance CommentExtraction
+           (HsArg
+              GhcPs
+              (GenLocated SrcSpanAnnA (HsType GhcPs))
+              (GenLocated SrcSpanAnnA (HsType GhcPs))) where
+  nodeComments HsValArg {} = emptyNodeComments
+  nodeComments HsTypeArg {} = emptyNodeComments
+  nodeComments HsArgPar {} = emptyNodeComments
+#else
 instance CommentExtraction
            (HsArg
               (GenLocated SrcSpanAnnA (HsType GhcPs))
@@ -656,6 +672,7 @@ instance CommentExtraction
   nodeComments HsValArg {} = emptyNodeComments
   nodeComments HsTypeArg {} = emptyNodeComments
   nodeComments HsArgPar {} = emptyNodeComments
+#endif
 #if MIN_VERSION_ghc_lib_parser(9,4,1)
 instance CommentExtraction (HsQuote GhcPs) where
   nodeComments ExpBr {} = emptyNodeComments
@@ -972,6 +989,12 @@ instance CommentExtraction FieldLabelString where
 instance CommentExtraction (HsUntypedSplice GhcPs) where
   nodeComments (HsUntypedSpliceExpr x _) = nodeComments x
   nodeComments HsQuasiQuote {} = emptyNodeComments
+#endif
+
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance CommentExtraction (LHsRecUpdFields GhcPs) where
+  nodeComments RegularRecUpdFields {} = emptyNodeComments
+  nodeComments OverloadedRecUpdFields {} = emptyNodeComments
 #endif
 -- | Marks an AST node as never appearing in the AST.
 --

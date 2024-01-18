@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -143,26 +144,17 @@ instance Pretty (HsModule GhcPs) where
       prettyModuleDecl HsModule {hsmodName = Nothing} =
         error "The module declaration does not exist."
       prettyModuleDecl HsModule { hsmodName = Just name
-                                , hsmodExports = Nothing
+                                , hsmodExports
                                 , hsmodExt = XModulePs {..}
                                 } = do
         pretty $ fmap ModuleNameWithPrefix name
         whenJust hsmodDeprecMessage $ \x -> do
           space
           pretty $ fmap ModuleDeprecatedPragma x
+        whenJust hsmodExports $ \exports -> do
+          newline
+          indentedBlock $ printCommentsAnd exports (vTuple . fmap pretty)
         string " where"
-      prettyModuleDecl HsModule { hsmodName = Just name
-                                , hsmodExports = Just exports
-                                , hsmodExt = XModulePs {..}
-                                } = do
-        pretty $ fmap ModuleNameWithPrefix name
-        whenJust hsmodDeprecMessage $ \x -> do
-          space
-          pretty $ fmap ModuleDeprecatedPragma x
-        newline
-        indentedBlock $ do
-          printCommentsAnd exports (vTuple . fmap pretty)
-          string " where"
       moduleDeclExists HsModule {hsmodName = Nothing} = False
       moduleDeclExists _ = True
       prettyDecls =
@@ -199,27 +191,15 @@ instance Pretty HsModule where
         ]
       prettyModuleDecl HsModule {hsmodName = Nothing} =
         error "The module declaration does not exist."
-      prettyModuleDecl HsModule { hsmodName = Just name
-                                , hsmodExports = Nothing
-                                , ..
-                                } = do
+      prettyModuleDecl HsModule {hsmodName = Just name, hsmodExports, ..} = do
         pretty $ fmap ModuleNameWithPrefix name
         whenJust hsmodDeprecMessage $ \x -> do
           space
           pretty $ fmap ModuleDeprecatedPragma x
+        whenJust hsmodExports $ \exports -> do
+          newline
+          indentedBlock $ printCommentsAnd exports (vTuple . fmap pretty)
         string " where"
-      prettyModuleDecl HsModule { hsmodName = Just name
-                                , hsmodExports = Just exports
-                                , ..
-                                } = do
-        pretty $ fmap ModuleNameWithPrefix name
-        whenJust hsmodDeprecMessage $ \x -> do
-          space
-          pretty $ fmap ModuleDeprecatedPragma x
-        newline
-        indentedBlock $ do
-          printCommentsAnd exports (vTuple . fmap pretty)
-          string " where"
       moduleDeclExists HsModule {hsmodName = Nothing} = False
       moduleDeclExists _ = True
       prettyDecls =
@@ -250,7 +230,7 @@ instance Pretty (HsDecl GhcPs) where
   pretty' (InstD _ inst) = pretty inst
   pretty' (DerivD _ x) = pretty x
   pretty' (ValD _ bind) = pretty bind
-  pretty' (SigD _ s) = pretty $ DeclSig s
+  pretty' (SigD _ s) = pretty s
   pretty' (KindSigD _ x) = pretty x
   pretty' (DefD _ x) = pretty x
   pretty' (ForD _ x) = pretty x
@@ -402,18 +382,21 @@ instance Pretty (Sig GhcPs) where
     string " ::"
     horizontal <-|> vertical
     where
-      horizontal = space >> pretty (hswc_body params)
+      horizontal = do
+        space
+        pretty $ HsSigTypeInsideDeclSig <$> hswc_body params
       vertical = do
         headLen <- printerLength printFunName
         indentSpaces <- getIndentSpaces
         if headLen < indentSpaces
-          then space
-          else newline
-        indentedBlock
-          $ indentedWithSpace 3
-          $ pretty
-          $ HsSigTypeInsideVerticalFuncSig <$> hswc_body params
-      printFunName = pretty $ head funName
+          then space |=> pretty (HsSigTypeInsideDeclSig <$> hswc_body params)
+          else do
+            newline
+            indentedBlock
+              $ indentedWithSpace 3
+              $ pretty
+              $ HsSigTypeInsideDeclSig <$> hswc_body params
+      printFunName = hCommaSep $ fmap pretty funName
   pretty' (PatSynSig _ names sig) =
     spaced
       [string "pattern", hCommaSep $ fmap pretty names, string "::", pretty sig]
@@ -438,12 +421,12 @@ instance Pretty (Sig GhcPs) where
   pretty' (FixSig _ x) = pretty x
   pretty' (InlineSig _ name detail) =
     spaced [string "{-#", pretty detail, pretty name, string "#-}"]
-  pretty' (SpecSig _ name sig _) =
+  pretty' (SpecSig _ name sigs _) =
     spaced
       [ string "{-# SPECIALISE"
       , pretty name
       , string "::"
-      , pretty $ head sig
+      , hCommaSep $ fmap pretty sigs
       , string "#-}"
       ]
   pretty' (SpecInstSig _ sig) =
@@ -467,18 +450,21 @@ instance Pretty (Sig GhcPs) where
     string " ::"
     horizontal <-|> vertical
     where
-      horizontal = space >> pretty (hswc_body params)
+      horizontal = do
+        space
+        pretty $ HsSigTypeInsideDeclSig <$> hswc_body params
       vertical = do
         headLen <- printerLength printFunName
         indentSpaces <- getIndentSpaces
         if headLen < indentSpaces
-          then space
-          else newline
-        indentedBlock
-          $ indentedWithSpace 3
-          $ pretty
-          $ HsSigTypeInsideVerticalFuncSig <$> hswc_body params
-      printFunName = pretty $ head funName
+          then space |=> pretty (HsSigTypeInsideDeclSig <$> hswc_body params)
+          else do
+            newline
+            indentedBlock
+              $ indentedWithSpace 3
+              $ pretty
+              $ HsSigTypeInsideDeclSig <$> hswc_body params
+      printFunName = hCommaSep $ fmap pretty funName
   pretty' (PatSynSig _ names sig) =
     spaced
       [string "pattern", hCommaSep $ fmap pretty names, string "::", pretty sig]
@@ -504,12 +490,12 @@ instance Pretty (Sig GhcPs) where
   pretty' (FixSig _ x) = pretty x
   pretty' (InlineSig _ name detail) =
     spaced [string "{-#", pretty detail, pretty name, string "#-}"]
-  pretty' (SpecSig _ name sig _) =
+  pretty' (SpecSig _ name sigs _) =
     spaced
       [ string "{-# SPECIALISE"
       , pretty name
       , string "::"
-      , pretty $ head sig
+      , hCommaSep $ fmap pretty sigs
       , string "#-}"
       ]
   pretty' (SpecInstSig _ _ sig) =
@@ -527,28 +513,6 @@ instance Pretty (Sig GhcPs) where
       , string "#-}"
       ]
 #endif
-instance Pretty DeclSig where
-  pretty' (DeclSig (TypeSig _ funName params)) = do
-    printFunName
-    string " ::"
-    horizontal <-|> vertical
-    where
-      horizontal = do
-        space
-        pretty $ HsSigTypeInsideDeclSig <$> hswc_body params
-      vertical = do
-        headLen <- printerLength printFunName
-        indentSpaces <- getIndentSpaces
-        if headLen < indentSpaces
-          then space |=> pretty (HsSigTypeInsideDeclSig <$> hswc_body params)
-          else do
-            newline
-            indentedBlock
-              $ indentedWithSpace 3
-              $ pretty
-              $ HsSigTypeInsideDeclSig <$> hswc_body params
-      printFunName = hCommaSep $ fmap pretty funName
-  pretty' (DeclSig x) = pretty x
 #if MIN_VERSION_ghc_lib_parser(9,6,1)
 instance Pretty (HsDataDefn GhcPs) where
   pretty' HsDataDefn {..} =
@@ -715,7 +679,7 @@ prettyHsExpr (HsAppType _ l r) = do
   string " @"
   pretty r
 #endif
-prettyHsExpr (OpApp _ l o r) = pretty (InfixApp l o r False)
+prettyHsExpr (OpApp _ l o r) = pretty (InfixApp l o r)
 prettyHsExpr (NegApp _ x _) = string "-" >> pretty x
 #if MIN_VERSION_ghc_lib_parser(9,4,1)
 prettyHsExpr (HsPar _ _ expr _) = parens $ pretty expr
@@ -798,7 +762,33 @@ prettyHsExpr (RecordCon _ name fields) = horizontal <-|> vertical
     vertical = do
       pretty name
       (space >> pretty fields) <-|> (newline >> indentedBlock (pretty fields))
-#if MIN_VERSION_ghc_lib_parser(9,4,1)
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+prettyHsExpr (RecordUpd _ name fields) = hor <-|> ver
+  where
+    hor = spaced [pretty name, printHorFields fields]
+    ver = do
+      pretty name
+      newline
+      indentedBlock $ printHorFields fields <-|> printVerFields fields
+    printHorFields RegularRecUpdFields {..} =
+      hFields $ fmap (`printCommentsAnd` horField) recUpdFields
+    printHorFields OverloadedRecUpdFields {..} =
+      hFields $ fmap (`printCommentsAnd` horField) olRecUpdFields
+    printVerFields RegularRecUpdFields {..} =
+      vFields $ fmap printField recUpdFields
+    printVerFields OverloadedRecUpdFields {..} =
+      vFields $ fmap printField olRecUpdFields
+    printField x = printCommentsAnd x $ (<-|>) <$> horField <*> verField
+    horField HsFieldBind {..} = do
+      pretty hfbLHS
+      string " = "
+      pretty hfbRHS
+    verField HsFieldBind {..} = do
+      pretty hfbLHS
+      string " ="
+      newline
+      indentedBlock $ pretty hfbRHS
+#elif MIN_VERSION_ghc_lib_parser(9,4,1)
 prettyHsExpr (RecordUpd _ name fields) = hor <-|> ver
   where
     hor = spaced [pretty name, either printHorFields printHorFields fields]
@@ -1208,7 +1198,7 @@ instance Pretty (StmtLR GhcPs GhcPs (GenLocated SrcSpanAnnA (HsExpr GhcPs))) whe
       ver = newline >> indentedBlock (pretty body)
   pretty' ApplicativeStmt {} = notGeneratedByParser
   pretty' (BodyStmt _ (L loc (OpApp _ l o r)) _ _) =
-    pretty (L loc (InfixApp l o r True))
+    pretty (L loc (InfixApp l o r))
   pretty' (BodyStmt _ body _ _) = pretty body
   pretty' (LetStmt _ l) = string "let " |=> pretty l
   pretty' (ParStmt _ xs _ _) = hvBarSep $ fmap pretty xs
@@ -1309,7 +1299,11 @@ prettyHsType x@(HsAppTy _ l r) = hor <-|> ver
   where
     hor = spaced $ fmap pretty [l, r]
     ver = pretty $ HsTypeWithVerticalAppTy x
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+prettyHsType (HsAppKindTy _ l _ r) = pretty l >> string " @" >> pretty r
+#else
 prettyHsType (HsAppKindTy _ l r) = pretty l >> string " @" >> pretty r
+#endif
 prettyHsType (HsFunTy _ _ a b) = (pretty a >> string " -> ") |=> pretty b
 prettyHsType (HsListTy _ xs) = brackets $ pretty xs
 prettyHsType (HsTupleTy _ HsUnboxedTuple []) = string "(# #)"
@@ -1613,7 +1607,7 @@ instance Pretty (HsBracket GhcPs) where
   pretty' (TExpBr _ x) = typedBrackets $ pretty x
 #endif
 instance Pretty SigBindFamily where
-  pretty' (Sig x) = pretty $ DeclSig x
+  pretty' (Sig x) = pretty x
   pretty' (Bind x) = pretty x
   pretty' (TypeFamily x) = pretty x
   pretty' (TyFamInst x) = pretty x
@@ -2058,8 +2052,17 @@ instance Pretty FamEqn' where
         case famEqnFor of
           DataFamInstDeclForTopLevel -> "data instance"
           DataFamInstDeclForInsideClassInst -> "data"
-
 -- | HsArg (LHsType GhcPs) (LHsType GhcPs)
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance Pretty
+           (HsArg
+              GhcPs
+              (GenLocated SrcSpanAnnA (HsType GhcPs))
+              (GenLocated SrcSpanAnnA (HsType GhcPs))) where
+  pretty' (HsValArg x) = pretty x
+  pretty' (HsTypeArg _ x) = string "@" >> pretty x
+  pretty' HsArgPar {} = notUsedInParsedStage
+#else
 instance Pretty
            (HsArg
               (GenLocated SrcSpanAnnA (HsType GhcPs))
@@ -2067,6 +2070,7 @@ instance Pretty
   pretty' (HsValArg x) = pretty x
   pretty' (HsTypeArg _ x) = string "@" >> pretty x
   pretty' HsArgPar {} = notUsedInParsedStage
+#endif
 #if MIN_VERSION_ghc_lib_parser(9,4,1)
 instance Pretty (HsQuote GhcPs) where
   pretty' (ExpBr _ x) = brackets $ wrapWithBars $ pretty x
@@ -2085,6 +2089,21 @@ instance Pretty (WarnDecls GhcPs) where
 instance Pretty (WarnDecls GhcPs) where
   pretty' (Warnings _ _ x) = lined $ fmap pretty x
 #endif
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance Pretty (WarnDecl GhcPs) where
+  pretty' (Warning _ names deprecatedOrWarning) =
+    case deprecatedOrWarning of
+      DeprecatedTxt _ reasons -> prettyWithTitleReasons "DEPRECATED" reasons
+      WarningTxt _ _ reasons -> prettyWithTitleReasons "WARNING" reasons
+    where
+      prettyWithTitleReasons title reasons =
+        lined
+          [ string $ "{-# " ++ title
+          , spaced
+              [hCommaSep $ fmap pretty names, hCommaSep $ fmap pretty reasons]
+          , string " #-}"
+          ]
+#else
 instance Pretty (WarnDecl GhcPs) where
   pretty' (Warning _ names deprecatedOrWarning) =
     case deprecatedOrWarning of
@@ -2098,6 +2117,7 @@ instance Pretty (WarnDecl GhcPs) where
               [hCommaSep $ fmap pretty names, hCommaSep $ fmap pretty reasons]
           , string " #-}"
           ]
+#endif
 #if MIN_VERSION_ghc_lib_parser(9,4,1)
 instance Pretty (WithHsDocIdentifiers StringLiteral GhcPs) where
   pretty' WithHsDocIdentifiers {..} = pretty hsDocString
@@ -2223,7 +2243,12 @@ instance Pretty (ForeignDecl GhcPs) where
       , string "::"
       , pretty fd_sig_ty
       ]
-#if MIN_VERSION_ghc_lib_parser(9,6,1)
+#if MIN_VERSION_ghc_lib_parser(9,8,0)
+instance Pretty (ForeignImport GhcPs) where
+  pretty' (CImport (L _ (SourceText s)) conv safety _ _) =
+    spaced [pretty conv, pretty safety, output s]
+  pretty' (CImport _ conv safety _ _) = spaced [pretty conv, pretty safety]
+#elif MIN_VERSION_ghc_lib_parser(9,6,0)
 instance Pretty (ForeignImport GhcPs) where
   pretty' (CImport (L _ (SourceText s)) conv safety _ _) =
     spaced [pretty conv, pretty safety, string s]
@@ -2235,7 +2260,11 @@ instance Pretty ForeignImport where
   pretty' (CImport conv safety _ _ _) = spaced [pretty conv, pretty safety]
 #endif
 
-#if MIN_VERSION_ghc_lib_parser(9,6,1)
+#if MIN_VERSION_ghc_lib_parser(9,8,0)
+instance Pretty (ForeignExport GhcPs) where
+  pretty' (CExport (L _ (SourceText s)) conv) = spaced [pretty conv, output s]
+  pretty' (CExport _ conv) = pretty conv
+#elif MIN_VERSION_ghc_lib_parser(9,6,0)
 instance Pretty (ForeignExport GhcPs) where
   pretty' (CExport (L _ (SourceText s)) conv) = spaced [pretty conv, string s]
   pretty' (CExport _ conv) = pretty conv
@@ -2364,11 +2393,15 @@ instance Pretty OverLitVal where
   pretty' (HsIntegral x) = pretty x
   pretty' (HsFractional x) = pretty x
   pretty' (HsIsString _ x) = string $ unpackFS x
-
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance Pretty IntegralLit where
+  pretty' IL {il_text = SourceText s} = output s
+  pretty' IL {..} = string $ show il_value
+#else
 instance Pretty IntegralLit where
   pretty' IL {il_text = SourceText s} = string s
   pretty' IL {..} = string $ show il_value
-
+#endif
 instance Pretty FractionalLit where
   pretty' = output
 
@@ -2558,13 +2591,19 @@ instance Pretty CCallConv where
   pretty' StdCallConv = string "stdcall"
   pretty' PrimCallConv = string "prim"
   pretty' JavaScriptCallConv = string "javascript"
-
+#if MIN_VERSION_ghc_lib_parser(9,8,1)
+instance Pretty ModuleDeprecatedPragma where
+  pretty' (ModuleDeprecatedPragma (WarningTxt _ _ xs)) =
+    spaced [string "{-# WARNING", spaced $ fmap pretty xs, string "#-}"]
+  pretty' (ModuleDeprecatedPragma (DeprecatedTxt _ xs)) =
+    spaced [string "{-# DEPRECATED", spaced $ fmap pretty xs, string "#-}"]
+#else
 instance Pretty ModuleDeprecatedPragma where
   pretty' (ModuleDeprecatedPragma (WarningTxt _ xs)) =
     spaced [string "{-# WARNING", spaced $ fmap pretty xs, string "#-}"]
   pretty' (ModuleDeprecatedPragma (DeprecatedTxt _ xs)) =
     spaced [string "{-# DEPRECATED", spaced $ fmap pretty xs, string "#-}"]
-
+#endif
 instance Pretty HsSrcBang where
   pretty' (HsSrcBang _ unpack strictness) = do
     pretty unpack
